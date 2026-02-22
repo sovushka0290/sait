@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="ru" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>CORE_SYSTEM | Aktobe Tech Pulse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --accent: #00f0ff;
+            --purple: #7000ff;
+            --pink:   #ff00c8;
+            --green:  #00ff95;
+            --bg:     #020202;
+        }
+        *, *::before, *::after { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            background: var(--bg);
+            color: #fff;
+            font-family: 'Space Grotesk', sans-serif;
+            overflow-x: hidden;
+            margin: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* ── CANVAS ── */
+        #matrix-canvas {
+            position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0; pointer-events: none;
+        }
+        /* ── BLOBS ── */
+        .blob {
+            position: fixed; border-radius: 50%;
+            filter: blur(130px); opacity: .12;
+            z-index: 0; pointer-events: none;
+            transition: background-color 1.2s ease;
+        }
+        /* ── CONTENT ABOVE CANVAS ── */
+        nav, main, footer, aside, #mobile-menu { position: relative; z-index: 10; }
+
+        /* ── PAGE LOADER ── */
+        #page-loader {
+            position: fixed; inset: 0;
+            background: var(--accent);
+            z-index: 9999;
+            transform: scaleY(0); transform-origin: bottom;
+            transition: transform .55s cubic-bezier(.19,1,.22,1);
+            pointer-events: none;
+        }
+
+        /* ── GLASS ── */
+        .glass {
+            background: rgba(255,255,255,.025);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,.07);
+            transition: border-color .3s, background .3s;
+        }
+        .glass:hover { border-color: rgba(0,240,255,.35); background: rgba(255,255,255,.05); }
+
+        /* ── EVENT CARD ── */
+        .event-card {
+            background: rgba(5,12,25,.6);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(0,240,255,.15);
+            transition: border-color .4s, box-shadow .4s, transform .4s;
+        }
+        .event-card:hover {
+            border-color: rgba(0,240,255,.5);
+            box-shadow: 0 0 60px rgba(0,240,255,.1);
+            transform: translateY(-6px);
+        }
+        /* ── LOCKED CARD ── */
+        .locked-card {
+            background: rgba(5,12,25,.4);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,.04);
+            filter: grayscale(1); opacity: .25;
+            transition: filter .4s, opacity .4s;
+        }
+        .locked-card:hover { filter: grayscale(0); opacity: .55; }
+
+        /* ── TYPOGRAPHY ── */
+        .vertical-text { writing-mode: vertical-rl; text-orientation: mixed; }
+
+        /* ── BADGE ── */
+        .badge {
+            display: inline-block;
+            padding: 2px 10px; border-radius: 100px;
+            font-size: 9px; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 1.5px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ── TICKER ── */
+        @keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+        .ticker-wrap { overflow: hidden; white-space: nowrap; }
+        .ticker-inner {
+            display: inline-flex; align-items: center; gap: 2.5rem;
+            animation: ticker 42s linear infinite;
+            will-change: transform;
+        }
+
+        /* ── REVEAL ── */
+        .reveal { opacity:0; transform:translateY(26px); transition: opacity .85s ease-out, transform .85s ease-out; }
+        .reveal.active { opacity:1; transform:translateY(0); }
+
+        /* ── GLITCH ── */
+        @keyframes g1 { 0%,100%{clip-path:inset(0 0 94% 0);transform:translate(-3px,0)} 50%{clip-path:inset(0 0 84% 0);transform:translate(3px,0)} }
+        @keyframes g2 { 0%,100%{clip-path:inset(88% 0 0 0);transform:translate(3px,0)}  50%{clip-path:inset(78% 0 0 0);transform:translate(-3px,0)} }
+        .glitch { position: relative; }
+        .glitch::before, .glitch::after { content:attr(data-text); position:absolute; top:0; left:0; width:100%; pointer-events:none; }
+        .glitch::before { color:var(--pink);   animation:g1 4s infinite;       opacity:.55; }
+        .glitch::after  { color:var(--accent);  animation:g2 4s infinite .12s; opacity:.55; }
+
+        /* ── COUNTER GLOW ── */
+        @keyframes cpulse { 0%,100%{text-shadow:0 0 20px rgba(0,240,255,.5)} 50%{text-shadow:0 0 60px rgba(0,240,255,1),0 0 120px rgba(0,240,255,.35)} }
+        .counter-glow { animation: cpulse 2.2s ease-in-out infinite; }
+
+        /* ── GRID BG ── */
+        .grid-bg {
+            background-image:
+                linear-gradient(rgba(0,240,255,.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,240,255,.02) 1px, transparent 1px);
+            background-size: 60px 60px;
+        }
+
+        /* ── DIVIDER ── */
+        .gradient-line {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0,240,255,.3), rgba(112,0,255,.3), transparent);
+        }
+
+        /* ── PROFILE PANEL ── */
+        #profile-panel {
+            position: fixed; right: -420px; top: 0;
+            width: min(360px, 92vw); height: 100%;
+            background: rgba(2,2,2,.97);
+            backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px);
+            z-index: 500; border-left: 1px solid var(--accent);
+            transition: right .6s cubic-bezier(.19,1,.22,1);
+            overflow-y: auto;
+        }
+        #profile-panel.open { right: 0; }
+
+        /* ── MOBILE MENU ── */
+        #mobile-menu {
+            position: fixed; inset: 0;
+            background: rgba(2,2,2,.97);
+            backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px);
+            z-index: 200;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 2rem;
+            transform: translateY(-100%);
+            transition: transform .5s cubic-bezier(.19,1,.22,1);
+        }
+        #mobile-menu.open { transform: translateY(0); }
+
+        /* ── AI CARD BG LETTER ── */
+        .card-bg-letter {
+            position: absolute;
+            font-size: clamp(7rem, 22vw, 18rem);
+            font-weight: 900;
+            color: rgba(0,240,255,.03);
+            top: 50%; left: 50%;
+            transform: translate(-50%,-50%);
+            pointer-events: none; user-select: none;
+            line-height: 1;
+        }
+
+        /* ── PROGRESS BAR GLOW ── */
+        #progress-bar { box-shadow: 0 0 12px rgba(0,240,255,.9); }
+
+        /* ── RESPONSIVE TITLE SIZES ── */
+        .hero-title  { font-size: clamp(3rem, 11vw, 12rem); font-weight: 800; letter-spacing: -.04em; line-height: .88; text-transform: uppercase; }
+        .detail-title{ font-size: clamp(2.4rem, 8.5vw, 8.5rem); font-weight: 800; letter-spacing: -.04em; line-height: .9;  text-transform: uppercase; }
+
+        /* ── SCAN LINE ── */
+        @keyframes scanline { 0%{top:0} 100%{top:100%} }
+        .scanline {
+            position: fixed; left: 0;
+            width: 100%; height: 2px;
+            background: linear-gradient(transparent, rgba(0,240,255,.05), transparent);
+            animation: scanline 8s linear infinite;
+            pointer-events: none; z-index: 5;
+        }
+
+        /* ── TAB INDICATOR ── */
+        #tab-indicator { transition: all .45s cubic-bezier(.19,1,.22,1); }
+
+        /* ── HIDDEN ── */
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="scanline"></div>
+    <div id="page-loader"></div>
+
+    <!-- BACKGROUND -->
+    <canvas id="matrix-canvas"></canvas>
+    <div id="glow-1" class="blob" style="width:min(700px,130vw);height:min(700px,130vw);background:#00f0ff;top:-15%;left:-10%;"></div>
+    <div id="glow-2" class="blob" style="width:min(600px,110vw);height:min(600px,110vw);background:#7000ff;bottom:-15%;right:-10%;"></div>
+
+    <!-- ═══ PROFILE PANEL ═══ -->
+    <aside id="profile-panel" class="p-7 flex flex-col gap-5">
+        <button onclick="toggleProfile()" class="self-end text-white/30 hover:text-white transition-colors p-2">
+            <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+        <h2 class="text-2xl font-black italic tracking-tighter uppercase">Identity_Node</h2>
+        <p class="mono text-[9px] text-white/20 uppercase tracking-[.4em]">// Персонализация</p>
+        <div class="flex flex-col items-center gap-4 py-5">
+            <div id="avatar-display" class="w-20 h-20 rounded-full border-2 border-[#00f0ff] flex items-center justify-center text-4xl bg-black shadow-[0_0_30px_rgba(0,240,255,.2)]">👤</div>
+            <input id="username-input" type="text" placeholder="Enter Nickname"
+                   class="bg-white/5 border border-white/10 p-3 rounded-xl w-full mono text-center outline-none focus:border-[#00f0ff] transition-colors text-sm">
+        </div>
+        <div class="grid grid-cols-4 gap-2">
+            <button onclick="updateAvatar('🤖')" class="glass p-2.5 rounded-xl text-xl hover:border-[#00f0ff] transition-all">🤖</button>
+            <button onclick="updateAvatar('⚡')" class="glass p-2.5 rounded-xl text-xl hover:border-[#00f0ff] transition-all">⚡</button>
+            <button onclick="updateAvatar('💠')" class="glass p-2.5 rounded-xl text-xl hover:border-[#00f0ff] transition-all">💠</button>
+            <button onclick="updateAvatar('🔥')" class="glass p-2.5 rounded-xl text-xl hover:border-[#00f0ff] transition-all">🔥</button>
+            <button onclick="updateAvatar('🧠')" class="glass p-2.5 rounded-xl text-xl hover:border-[#00f0ff] transition-all">🧠</button>
+            <button onclick="updateAvatar('👾')" class="glass p-2.5 rounded-xl text-xl hover:border-[#00f0ff] transition-all">👾</button>
+            <button onclick="updateAvatar('🌐')" class="glass p-2.5 rounded-xl text-xl hover:border-[#00f0ff] transition-all">🌐</button>
+            <button onclick="updateAvatar('⚙️')" class="glass p-2.5 rounded-xl text-xl hover:border-[#00f0ff] transition-all">⚙️</button>
+        </div>
+        <button onclick="saveProfile()" class="w-full py-4 bg-[#00f0ff] text-black font-black uppercase tracking-[.25em] rounded-2xl mt-2 hover:shadow-[0_0_30px_rgba(0,240,255,.5)] active:scale-95 transition-all text-sm">
+            Update_Profile
+        </button>
+        <div class="glass p-4 rounded-2xl text-sm">
+            <p class="mono text-[9px] text-white/15 uppercase tracking-widest mb-2">System_Info</p>
+            <p class="mono text-xs text-white/35">Node: <span class="text-[#00f0ff]">AKTOBE_CENTRAL</span></p>
+            <p class="mono text-xs text-white/35 mt-1">Status: <span class="text-green-400">ONLINE</span></p>
+        </div>
+    </aside>
+
+    <!-- ═══ MOBILE MENU ═══ -->
+    <div id="mobile-menu">
+        <button onclick="closeMobileMenu()" class="absolute top-5 right-5 text-white/30 hover:text-white p-2">
+            <i data-lucide="x" class="w-6 h-6"></i>
+        </button>
+        <button onclick="showPage('hub');closeMobileMenu();" class="mono text-2xl font-black uppercase tracking-widest hover:text-[#00f0ff] transition-colors">/HUB</button>
+        <a href="#stakeholders" onclick="closeMobileMenu()" class="mono text-xl font-bold uppercase tracking-widest text-white/45 hover:text-white transition-colors">/FOR_WHO</a>
+        <a href="#submit-event" onclick="closeMobileMenu()" class="mono text-xl font-bold uppercase tracking-widest text-white/45 hover:text-white transition-colors">/SUBMIT</a>
+    </div>
+
+    <!-- ═══ HEADER ═══ -->
+    <nav class="fixed top-0 w-full z-[100] px-4 sm:px-8 md:px-10 py-4 flex justify-between items-center backdrop-blur-xl border-b border-white/5">
+        <div class="flex items-center gap-3 cursor-pointer group" onclick="showPage('hub')">
+            <div id="logo-3d" class="w-9 h-9 shrink-0"></div>
+            <div>
+                <span class="text-sm sm:text-base md:text-xl font-black mono tracking-[.2em] uppercase italic group-hover:text-[#00f0ff] transition-colors leading-none">CORE_SYSTEM</span>
+                <div class="flex items-center gap-1.5 mt-0.5">
+                    <span class="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
+                    <span class="mono text-[9px] text-white/20 uppercase tracking-[.3em] hidden sm:block">Aktobe Node</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Desktop -->
+        <div id="nav-actions" class="hidden md:flex gap-4 items-center">
+            <span class="mono text-[9px] text-white/15 uppercase tracking-[.4em] animate-pulse">03.03.2026</span>
+            <button onclick="showPage('hub')" class="mono text-xs hover:text-[#00f0ff] transition-colors tracking-widest px-3 py-2 rounded-lg hover:bg-white/5">/HUB</button>
+            <a href="#submit-event" class="px-4 py-2 bg-white/5 border border-white/10 text-white font-bold text-xs mono rounded-xl hover:bg-[#00f0ff] hover:text-black hover:border-[#00f0ff] transition-all tracking-wider">SUBMIT_PROPOSAL</a>
+            <button onclick="toggleProfile()" class="glass px-4 py-2 rounded-full flex items-center gap-2 hover:border-[#00f0ff] transition-all">
+                <span id="nav-avatar" class="text-sm">👤</span>
+                <span id="nav-user" class="text-xs mono font-bold tracking-tight">Guest_User</span>
+                <div class="w-2 h-2 bg-[#00f0ff] rounded-full animate-pulse"></div>
+            </button>
+        </div>
+
+        <!-- Mobile -->
+        <div class="flex md:hidden gap-2 items-center">
+            <button onclick="toggleProfile()" class="glass p-2 rounded-full flex items-center justify-center">
+                <span id="nav-avatar-mob" class="text-base leading-none">👤</span>
+            </button>
+            <button onclick="openMobileMenu()" class="glass p-2.5 rounded-xl">
+                <i data-lucide="menu" class="w-5 h-5"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- ═══════════════════════════════════
+         PAGE: HUB
+    ═══════════════════════════════════ -->
+    <main id="hub-page" class="pb-20">
+
+        <!-- HERO -->
+        <section class="grid-bg min-h-screen flex items-center px-4 sm:px-8 md:px-10 lg:px-14 pt-20">
+            <div class="max-w-7xl mx-auto w-full py-16 md:py-24">
+                <div class="reveal">
+                    <div class="flex items-center gap-2 mb-5">
+                        <span class="w-2 h-2 bg-[#00f0ff] rounded-full animate-ping shrink-0"></span>
+                        <span class="mono text-[10px] text-[#00f0ff] uppercase tracking-[.5em]">Aktobe Node // 03.03.2026 // Online</span>
+                    </div>
+
+                    <h1 class="glitch hero-title mb-6" data-text="LOGIC GATES">
+                        LOGIC GATES<br><span class="text-[#00f0ff] italic">OPENED.</span>
+                    </h1>
+
+                    <p class="text-white/40 max-w-xl text-base md:text-xl leading-relaxed mono mt-8">
+                        Первая в Актобе экосистема для тех, кто строит будущее.<br>
+                        <span class="text-[#00f0ff]/60">Воркшопы, рои ИИ и чистая логика.</span><br>
+                        Забудь про теорию — начни управлять системами.
+                    </p>
+                    <p class="text-white/20 mono text-sm mt-4">Про ивенты и для кого — смотри ниже ↓</p>
+                </div>
+
+                <!-- Stats -->
+                <div class="grid grid-cols-3 gap-3 mt-12 max-w-xs sm:max-w-sm reveal" style="transition-delay:180ms">
+                    <div class="glass p-3 sm:p-4 rounded-2xl text-center">
+                        <div class="text-xl sm:text-2xl md:text-3xl font-black mono text-[#00f0ff] counter-glow" id="hero-events">0</div>
+                        <div class="mono text-[9px] text-white/20 uppercase tracking-widest mt-1">Events</div>
+                    </div>
+                    <div class="glass p-3 sm:p-4 rounded-2xl text-center">
+                        <div class="text-xl sm:text-2xl md:text-3xl font-black mono text-[#00f0ff] counter-glow" id="hero-members">0</div>
+                        <div class="mono text-[9px] text-white/20 uppercase tracking-widest mt-1">Members</div>
+                    </div>
+                    <div class="glass p-3 sm:p-4 rounded-2xl text-center">
+                        <div class="text-xl sm:text-2xl md:text-3xl font-black mono text-[#00f0ff] counter-glow">99.9%</div>
+                        <div class="mono text-[9px] text-white/20 uppercase tracking-widest mt-1">Uptime</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TICKER -->
+        <div class="ticker-wrap border-y border-white/5 py-4 bg-white/[.01] backdrop-blur-sm">
+            <div class="ticker-inner mono text-[10px] tracking-[.4em] text-white/22 uppercase">
+                <span class="flex items-center gap-2 shrink-0"><i data-lucide="activity" class="w-3 h-3 text-[#00f0ff]"></i>TOTAL EVENTS: [12]</span>
+                <span class="text-[#00f0ff]/25 shrink-0">///</span>
+                <span class="flex items-center gap-2 shrink-0"><i data-lucide="users" class="w-3 h-3"></i>MEMBERS: [402]</span>
+                <span class="text-[#00f0ff]/25 shrink-0">///</span>
+                <span class="flex items-center gap-2 shrink-0"><i data-lucide="cpu" class="w-3 h-3 text-[#00f0ff]"></i>UPTIME: [99.9%]</span>
+                <span class="text-[#00f0ff]/25 shrink-0">///</span>
+                <span class="flex items-center gap-2 shrink-0"><i data-lucide="map-pin" class="w-3 h-3"></i>AMERICAN CORNER</span>
+                <span class="text-[#00f0ff]/25 shrink-0">///</span>
+                <span class="shrink-0">Partners: Aqtobe IT Hub · QAZGUU</span>
+                <span class="text-[#00f0ff]/25 shrink-0">///</span>
+                <!-- duplicate for loop -->
+                <span class="flex items-center gap-2 shrink-0"><i data-lucide="activity" class="w-3 h-3 text-[#00f0ff]"></i>TOTAL EVENTS: [12]</span>
+                <span class="text-[#00f0ff]/25 shrink-0">///</span>
+                <span class="flex items-center gap-2 shrink-0"><i data-lucide="users" class="w-3 h-3"></i>MEMBERS: [402]</span>
+                <span class="text-[#00f0ff]/25 shrink-0">///</span>
+                <span class="flex items-center gap-2 shrink-0"><i data-lucide="cpu" class="w-3 h-3 text-[#00f0ff]"></i>UPTIME: [99.9%]</span>
+                <span class="text-[#00f0ff]/25 shrink-0">///</span>
+                <span class="flex items-center gap-2 shrink-0"><i data-lucide="map-pin" class="w-3 h-3"></i>AMERICAN CORNER</span>
+                <span class="text-[#00f0ff]/25 shrink-0">///</span>
+                <span class="shrink-0">Partners: Aqtobe IT Hub · QAZGUU</span>
+            </div>
+        </div>
+
+        <!-- EVENT GRID -->
+        <section class="px-4 sm:px-8 md:px-10 lg:px-14 max-w-7xl mx-auto mt-20 md:mt-28">
+            <div class="flex items-center gap-4 mb-10 reveal">
+                <h2 class="text-lg sm:text-xl md:text-2xl font-black mono tracking-[.2em] uppercase shrink-0">ACTIVE_OPERATIONS</h2>
+                <div class="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent hidden sm:block"></div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
+
+                <!-- Card 1: OPEN -->
+                <div onclick="showPage('detail')"
+                     class="event-card p-7 md:p-9 rounded-[32px] md:rounded-[40px] cursor-pointer group relative overflow-hidden flex flex-col justify-between reveal"
+                     style="min-height:440px;">
+                    <div class="card-bg-letter">AI</div>
+                    <div class="flex justify-between items-start relative z-10">
+                        <div class="flex flex-col gap-1.5">
+                            <span class="badge bg-[#00f0ff] text-black" style="box-shadow:0 0 16px rgba(0,240,255,.5)">● OPEN</span>
+                            <span class="mono text-[9px] text-white/25 uppercase tracking-widest">15:30 — 17:00</span>
+                        </div>
+                        <div class="vertical-text mono text-[9px] text-white/18 tracking-[.5em] uppercase">AMERICAN_CORNER</div>
+                    </div>
+                    <div class="relative z-10 mt-auto">
+                        <span class="mono text-[9px] text-white/22 uppercase tracking-widest mb-2 block">03.03.2026</span>
+                        <h3 class="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter mb-3 group-hover:text-[#00f0ff] transition-colors leading-[.9] italic uppercase">
+                            AI<br>ORCHESTRATION:<br>BEYOND PROMPTS
+                        </h3>
+                        <p class="text-white/30 text-xs mono mb-6 uppercase tracking-tighter leading-relaxed">
+                            Beyond Prompts &amp; Swarm Logic.
+                        </p>
+                        <div class="flex items-center justify-center gap-2 text-[#00f0ff] mono text-[10px] tracking-[.4em] border border-[#00f0ff]/30 py-3 rounded-2xl group-hover:bg-[#00f0ff] group-hover:text-black transition-all">
+                            <i data-lucide="terminal" class="w-3 h-3"></i> INITIALIZE_PROTOCOL
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: LOCKED -->
+                <div class="locked-card p-7 md:p-9 rounded-[32px] md:rounded-[40px] flex flex-col justify-center items-center reveal"
+                     style="min-height:440px; transition-delay:100ms;">
+                    <i data-lucide="lock" class="w-9 h-9 mb-4 text-white/25"></i>
+                    <span class="badge bg-white/10 text-white mb-4">COMING SOON</span>
+                    <h3 class="text-lg md:text-2xl font-black uppercase tracking-[.2em] italic mt-1 text-center leading-snug">Neural<br>Layers</h3>
+                    <p class="mono text-[10px] text-white/18 mt-3 uppercase tracking-widest text-center">Encrypted Protocol</p>
+                </div>
+
+                <!-- Card 3: LOCKED -->
+                <div class="locked-card p-7 md:p-9 rounded-[32px] md:rounded-[40px] flex flex-col justify-center items-center reveal sm:col-span-2 lg:col-span-1"
+                     style="min-height:440px; transition-delay:200ms;">
+                    <i data-lucide="message-square" class="w-9 h-9 mb-4 text-white/25"></i>
+                    <span class="badge mb-4" style="background:rgba(88,28,135,.4);color:rgb(196,181,253);border:1px solid rgba(168,85,247,.3)">PLANNING</span>
+                    <h3 class="text-lg md:text-2xl font-black uppercase tracking-[.2em] italic mt-1 text-center leading-snug">Speaking<br>Club v2</h3>
+                    <p class="mono text-[10px] text-white/18 mt-3 uppercase tracking-widest text-center">Queued Access</p>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- DIVIDER -->
+        <div class="gradient-line max-w-7xl mx-auto mx-4 sm:mx-8 md:mx-14 my-20 md:my-28"></div>
+
+        <!-- STAKEHOLDER SWITCHER -->
+        <section id="stakeholders" class="py-16 md:py-24 px-4 sm:px-8 md:px-10 lg:px-14 overflow-hidden">
+            <div class="max-w-6xl mx-auto">
+
+                <div class="text-center mb-12 md:mb-16 reveal">
+                    <span class="mono text-[10px] text-white/22 uppercase tracking-[.6em] mb-3 block">// AUDIENCE_SELECT</span>
+                    <h2 class="text-4xl sm:text-5xl md:text-7xl font-black tracking-tighter italic uppercase leading-none">
+                        Who is this<br><span class="text-[#00f0ff]">FOR?</span>
+                    </h2>
+                </div>
+
+                <div class="flex justify-center mb-12 reveal">
+                    <div class="inline-flex glass p-1.5 rounded-2xl relative">
+                        <div id="tab-indicator" class="absolute h-[calc(100%-12px)] top-[6px] left-[6px] bg-white rounded-xl z-0"></div>
+                        <button onclick="switchTab('parents',0)"  id="btn-parents"  class="relative z-10 px-4 sm:px-7 py-3 mono text-[10px] uppercase font-black transition-colors rounded-xl">Parents</button>
+                        <button onclick="switchTab('partners',1)" id="btn-partners" class="relative z-10 px-4 sm:px-7 py-3 mono text-[10px] uppercase font-black transition-colors rounded-xl">Partners</button>
+                        <button onclick="switchTab('teachers',2)" id="btn-teachers" class="relative z-10 px-4 sm:px-7 py-3 mono text-[10px] uppercase font-black transition-colors rounded-xl">Teachers</button>
+                    </div>
+                </div>
+
+                <div id="tab-content" class="min-h-[280px]"></div>
+            </div>
+        </section>
+
+        <!-- DIVIDER -->
+        <div class="gradient-line max-w-7xl mx-4 sm:mx-8 md:mx-14 my-4"></div>
+
+        <!-- SUBMIT -->
+        <section id="submit-event" class="py-16 md:py-24 px-4 sm:px-8 md:px-10 lg:px-14 max-w-5xl mx-auto reveal">
+            <div class="glass p-8 sm:p-12 md:p-16 lg:p-20 rounded-[36px] md:rounded-[50px] border-[#00f0ff]/15 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-[#00f0ff] to-transparent opacity-50"></div>
+                <div class="absolute -bottom-16 -right-16 w-40 h-40 bg-[#00f0ff] rounded-full filter blur-[70px] opacity-10 pointer-events-none"></div>
+                <span class="mono text-[10px] text-[#00f0ff] uppercase tracking-[.5em] mb-4 block">// OPEN_CALL</span>
+                <h2 class="text-3xl sm:text-4xl md:text-6xl font-black mb-5 italic uppercase tracking-tighter leading-none">
+                    Organizing<br>Something?
+                </h2>
+                <p class="text-white/40 mb-8 text-base md:text-lg leading-relaxed max-w-xl">
+                    We help the best tech minds in Aktobe find their audience.
+                    <span class="block mono text-xs text-white/18 tracking-widest mt-2 uppercase">Tech-focused · English-friendly · No-bullshit</span>
+                </p>
+                <a href="#" class="inline-flex items-center gap-2 px-7 sm:px-10 py-4 bg-[#00f0ff] text-black font-black uppercase tracking-[.25em] text-xs rounded-2xl hover:bg-white hover:shadow-[0_0_50px_rgba(0,240,255,.4)] transition-all hover:-translate-y-1">
+                    <i data-lucide="send" class="w-4 h-4"></i> SUBMIT YOUR PROPOSAL
+                </a>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ═══════════════════════════════════
+         PAGE: DETAIL
+    ═══════════════════════════════════ -->
+    <main id="detail-page" class="hidden pb-20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-8 md:px-10 lg:px-14 pt-24 md:pt-36">
+
+            <button onclick="showPage('hub')"
+                    class="glass inline-flex items-center gap-2 text-[#00f0ff] mono text-[10px] tracking-widest px-5 py-3 rounded-full mb-14 md:mb-20 hover:bg-white hover:text-black transition-all">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i> BACK_TO_HUB
+            </button>
+
+            <!-- HERO BLOCK -->
+            <div class="grid lg:grid-cols-2 gap-8 lg:gap-16 mb-20 md:mb-28">
+
+                <!-- Left -->
+                <div class="space-y-6">
+                    <span class="mono text-xs text-[#00f0ff] tracking-[.5em] uppercase animate-pulse block">Critical_Skill_2026+</span>
+                    <h1 class="detail-title">
+                        AI ORCHESTRATION:<br>BEYOND PROMPTS
+                    </h1>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="glass px-4 py-1.5 rounded-full mono text-xs border-[#00f0ff]/25 text-[#00f0ff] flex items-center gap-1.5">
+                            <i data-lucide="map-pin" class="w-3 h-3"></i>IT_HUB_AKTOBE
+                        </span>
+                        <span class="glass px-4 py-1.5 rounded-full mono text-xs flex items-center gap-1.5">
+                            <i data-lucide="clock" class="w-3 h-3"></i>15:30 — 17:00
+                        </span>
+                        <span class="glass px-4 py-1.5 rounded-full mono text-xs text-white/35">03.03.2026</span>
+                    </div>
+                    <p class="text-base md:text-xl text-white/45 leading-relaxed italic max-w-lg">
+                        Промпт-инжиниринг мертв. В 2026 году миром правят ИИ-агенты. Мы научим тебя проектировать логические цепочки, где Gemini, GPT и локальные модели работают как единый организм.
+                    </p>
+                </div>
+
+                <!-- Right: counter -->
+                <div>
+                    <div class="glass p-7 sm:p-10 md:p-12 rounded-[36px] md:rounded-[50px] border-[#00f0ff]/25 text-center relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-[#00f0ff] to-transparent"></div>
+                        <div class="flex items-center justify-center gap-2 mb-5">
+                            <span class="w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
+                            <span class="mono text-[9px] text-white/22 uppercase tracking-[.4em]">Live_Registration_Pulse</span>
+                        </div>
+                        <div id="participant-counter"
+                             class="font-black mono text-[#00f0ff] italic leading-none mb-1 counter-glow"
+                             style="font-size:clamp(4rem,15vw,9rem);">--</div>
+                        <div class="mono text-xs text-white/18 mb-5">/ 50 SPOTS</div>
+                        <div class="w-full h-1.5 bg-white/5 rounded-full overflow-hidden mb-7">
+                            <div id="progress-bar"
+                                 class="h-full bg-gradient-to-r from-[#00f0ff] to-[#7000ff] transition-all duration-1000"
+                                 style="width:0%"></div>
+                        </div>
+                        <p class="mono text-[9px] text-white/15 uppercase tracking-widest mb-5">Syncing with Google Database...</p>
+                        <a href="https://docs.google.com/forms/d/e/1FAIpQLSfl7B7mboZ4AE-3T_HqushaRMMJXALiCorr622_YEqwy47hbQ/viewform"
+                           target="_blank"
+                           class="block w-full py-4 md:py-5 bg-[#00f0ff] text-black font-black uppercase tracking-[.2em] text-sm rounded-2xl hover:bg-white hover:shadow-[0_0_40px_rgba(0,240,255,.4)] transition-all">
+                            REGISTER_IDENTITY
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AGENDA + SPEAKERS -->
+            <div class="grid md:grid-cols-2 gap-10 md:gap-16 pb-20">
+
+                <div>
+                    <h3 class="text-[#00f0ff] mono text-[10px] uppercase tracking-[.5em] mb-6">AGENDA_90MIN</h3>
+                    <div class="space-y-2">
+                        <div class="flex gap-4 border-l-2 border-[#00f0ff] pl-5 py-3 rounded-r-xl hover:bg-white/[.02] transition-all">
+                            <span class="mono text-[#00f0ff] text-sm shrink-0 font-bold">15:30</span>
+                            <div>
+                                <strong class="text-white text-sm">Intro: Why Orchestration?</strong>
+                                <p class="text-white/25 text-xs mt-0.5">Opening speech by Alikhan &amp; Balzhan</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4 border-l-2 border-white/10 pl-5 py-3 rounded-r-xl hover:bg-white/[.02] transition-all">
+                            <span class="mono text-white/25 text-sm shrink-0">15:40</span>
+                            <div>
+                                <strong class="text-sm">Deep Dive: Swarm Logic</strong>
+                                <p class="text-white/25 text-xs mt-0.5">How QAIYRYM works: Gemini + Vision + Forensic.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4 border-l-2 border-white/10 pl-5 py-3 rounded-r-xl hover:bg-white/[.02] transition-all">
+                            <span class="mono text-white/25 text-sm shrink-0">16:20</span>
+                            <div>
+                                <strong class="text-sm">Workshop: Build your Swarm</strong>
+                                <p class="text-white/25 text-xs mt-0.5">Teamwork. Designing AI systems for local problems.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-5">
+                    <h3 class="text-[#00f0ff] mono text-[10px] uppercase tracking-[.5em]">ARCHITECTS</h3>
+                    <div class="glass p-5 rounded-[22px] flex gap-4 items-center hover:border-[#00f0ff]/40 transition-all">
+                        <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-[#00f0ff] to-blue-900 shrink-0 shadow-[0_0_20px_rgba(0,240,255,.2)]"></div>
+                        <div>
+                            <h4 class="text-lg md:text-xl font-black tracking-tight">Alikhan</h4>
+                            <p class="text-white/25 text-xs italic mt-0.5">Founder of QAIYRYM · Swarm Architect · AI Logic Expert</p>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-[22px] flex gap-4 items-center hover:border-[#7000ff]/40 transition-all">
+                        <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-[#7000ff] to-purple-900 shrink-0 shadow-[0_0_20px_rgba(112,0,255,.2)]"></div>
+                        <div>
+                            <h4 class="text-lg md:text-xl font-black tracking-tight">Balzhan</h4>
+                            <p class="text-white/25 text-xs italic mt-0.5">US University Admit · Strategy Lead · AI Trends Expert</p>
+                        </div>
+                    </div>
+                    <div class="glass p-5 rounded-[22px] border-[#7000ff]/20">
+                        <h4 class="text-[#7000ff] mono text-[10px] uppercase tracking-[.5em] mb-4">Project_Shadow: QAIYRYM</h4>
+                        <div class="space-y-3">
+                            <div class="flex gap-3 items-start">
+                                <i data-lucide="layers" class="w-4 h-4 text-[#7000ff] shrink-0 mt-0.5"></i>
+                                <div><p class="font-bold text-sm uppercase tracking-tight">Swarm Logic</p><p class="text-white/22 text-xs italic mt-0.5">Иерархическая структура ИИ-агентов.</p></div>
+                            </div>
+                            <div class="flex gap-3 items-start">
+                                <i data-lucide="zap" class="w-4 h-4 text-[#7000ff] shrink-0 mt-0.5"></i>
+                                <div><p class="font-bold text-sm uppercase tracking-tight">Orchestration</p><p class="text-white/22 text-xs italic mt-0.5">Управление потоками между GPT-4o, Claude и локальными LLM.</p></div>
+                            </div>
+                            <div class="flex gap-3 items-start">
+                                <i data-lucide="award" class="w-4 h-4 text-[#7000ff] shrink-0 mt-0.5"></i>
+                                <div><p class="font-bold text-sm uppercase tracking-tight">Certification</p><p class="text-white/22 text-xs italic mt-0.5">Международное признание навыков управления ИИ.</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-white/5 py-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-8 md:px-10 flex flex-col sm:flex-row justify-between items-center gap-5">
+            <div>
+                <div class="mono text-[10px] text-white/15 uppercase tracking-[.4em]">CORE_SYSTEM // AKTOBE_TECH_PULSE // 2026</div>
+            </div>
+            <div class="flex gap-5">
+                <a href="#" class="text-white/18 hover:text-[#00f0ff] transition-colors"><i data-lucide="instagram" class="w-5 h-5"></i></a>
+                <a href="#" class="text-white/18 hover:text-[#00f0ff] transition-colors"><i data-lucide="github" class="w-5 h-5"></i></a>
+                <a href="#" class="text-white/18 hover:text-[#00f0ff] transition-colors"><i data-lucide="send" class="w-5 h-5"></i></a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+    // ══════════════════════════════════════════
+    //  CONFIG
+    // ══════════════════════════════════════════
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbylg6ReDKytw9_vmdKb0kWhvBGs3ic3IBy_IFXuYRfNdAEshL5nl47asSedFGW3oKw-Q/exec";
+    let userProfile = { name: 'Guest_User', avatar: '👤' };
+
+    // ══════════════════════════════════════════
+    //  MATRIX RAIN — binary only, top 50%,
+    //  gradient source corner shifts with scroll
+    // ══════════════════════════════════════════
+    (function() {
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+        let W, H, cols, drops, scrollRatio = 0;
+
+        function resize() {
+            W = canvas.width  = window.innerWidth;
+            H = canvas.height = window.innerHeight;
+            cols  = Math.floor(W / 18);
+            drops = Array.from({ length: cols }, () => Math.random() * -80);
+        }
+        window.addEventListener('resize', resize, { passive: true });
+        resize();
+
+        window.addEventListener('scroll', () => {
+            const max = Math.max(1, document.body.scrollHeight - window.innerHeight);
+            scrollRatio = Math.min(window.scrollY / max, 1);
+        }, { passive: true });
+
+        const HALF = 0.50; // rain stops at 50% of screen
+
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+            ctx.fillStyle = 'rgba(2,2,2,0.06)';
+            ctx.fillRect(0, 0, W, H);
+
+            for (let i = 0; i < cols; i++) {
+                const x = i * 18;
+                const y = drops[i] * 18;
+
+                // reset drops that go past the halfway boundary
+                if (y > H * HALF) {
+                    if (Math.random() > 0.975) drops[i] = 0;
+                    else drops[i]++;
+                    continue;
+                }
+
+                const nx = i / cols;                  // 0..1 left→right
+                const ny = y / Math.max(1, H * HALF); // 0..1 top→half
+
+                // Source corner: scroll=0 → top-left (0,0), scroll=1 → bottom-right (1,1)
+                const dist = Math.sqrt(
+                    Math.pow(nx - scrollRatio, 2) +
+                    Math.pow(ny - scrollRatio, 2)
+                );
+
+                // Radial gradient falloff from source corner
+                let alpha = Math.max(0, 1 - dist / 0.9);
+                // Extra fade approaching the halfway line
+                alpha *= Math.max(0, 1 - ny * ny);
+
+                if (alpha < 0.012) { drops[i]++; continue; }
+
+                const bright = Math.random() > 0.965;
+                ctx.font      = bright ? 'bold 13px monospace' : '13px monospace';
+                ctx.fillStyle = bright
+                    ? `rgba(0,240,255,${Math.min(alpha, 0.88)})`
+                    : `rgba(0,240,255,${Math.min(alpha * 0.2, 0.16)})`;
+
+                ctx.fillText(Math.random() > 0.5 ? '1' : '0', x, y);
+                drops[i]++;
+            }
+        }
+        setInterval(draw, 50);
+    })();
+
+    // ══════════════════════════════════════════
+    //  THREE.JS LOGO
+    // ══════════════════════════════════════════
+    (function() {
+        try {
+            const scene = new THREE.Scene();
+            const cam   = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+            const rend  = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            rend.setSize(36, 36);
+            rend.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.getElementById('logo-3d').appendChild(rend.domElement);
+            const mesh = new THREE.Mesh(
+                new THREE.TorusKnotGeometry(1, 0.32, 80, 8),
+                new THREE.MeshBasicMaterial({ color: 0x00f0ff, wireframe: true })
+            );
+            scene.add(mesh);
+            cam.position.z = 3.2;
+            (function loop() {
+                requestAnimationFrame(loop);
+                mesh.rotation.x += 0.01;
+                mesh.rotation.y += 0.015;
+                rend.render(scene, cam);
+            })();
+        } catch(e) {
+            document.getElementById('logo-3d').innerHTML =
+                '<div style="width:36px;height:36px;border:2px solid #00f0ff;display:flex;align-items:center;justify-content:center;transform:rotate(45deg)">' +
+                '<div style="width:12px;height:12px;background:#00f0ff;transform:rotate(-45deg)"></div></div>';
+        }
+    })();
+
+    // ══════════════════════════════════════════
+    //  BLOB PARALLAX (desktop only)
+    // ══════════════════════════════════════════
+    if (window.matchMedia('(pointer:fine)').matches) {
+        document.addEventListener('mousemove', e => {
+            const x = e.clientX / window.innerWidth;
+            const y = e.clientY / window.innerHeight;
+            document.getElementById('glow-1').style.transform = `translate(${x*32}px,${y*32}px)`;
+            document.getElementById('glow-2').style.transform = `translate(${-x*22}px,${-y*22}px)`;
+        }, { passive: true });
+    }
+
+    // ══════════════════════════════════════════
+    //  SCROLL REVEAL
+    // ══════════════════════════════════════════
+    const revObs = new IntersectionObserver(entries => {
+        entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('active'); });
+    }, { threshold: 0.06 });
+    document.querySelectorAll('.reveal').forEach(el => revObs.observe(el));
+
+    // ══════════════════════════════════════════
+    //  ANIMATED COUNTER
+    // ══════════════════════════════════════════
+    function animCount(el, target) {
+        if (!el) return;
+        let v = 0;
+        const step = target / 90;
+        const t = setInterval(() => {
+            v = Math.min(v + step, target);
+            el.textContent = Math.floor(v);
+            if (v >= target) clearInterval(t);
+        }, 18);
+    }
+
+    // ══════════════════════════════════════════
+    //  PROFILE
+    // ══════════════════════════════════════════
+    function toggleProfile() { document.getElementById('profile-panel').classList.toggle('open'); }
+    function updateAvatar(emoji) {
+        userProfile.avatar = emoji;
+        document.getElementById('avatar-display').textContent = emoji;
+    }
+    function saveProfile() {
+        userProfile.name = document.getElementById('username-input').value.trim() || 'Guest_User';
+        try { localStorage.setItem('core_user', JSON.stringify(userProfile)); } catch(e) {}
+        updateUI(); toggleProfile();
+    }
+    function updateUI() {
+        try { const s = JSON.parse(localStorage.getItem('core_user')); if (s) userProfile = s; } catch(e) {}
+        ['nav-user'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = userProfile.name; });
+        ['nav-avatar','nav-avatar-mob'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = userProfile.avatar; });
+        document.getElementById('avatar-display').textContent = userProfile.avatar;
+        document.getElementById('username-input').value = userProfile.name;
+    }
+    updateUI();
+
+    // ══════════════════════════════════════════
+    //  MOBILE MENU
+    // ══════════════════════════════════════════
+    function openMobileMenu()  { document.getElementById('mobile-menu').classList.add('open'); }
+    function closeMobileMenu() { document.getElementById('mobile-menu').classList.remove('open'); }
+
+    // ══════════════════════════════════════════
+    //  STAKEHOLDER SWITCHER
+    // ══════════════════════════════════════════
+    const STDATA = {
+        parents:  { title:"INVESTING IN <span style='color:#00f0ff'>GENIUS</span>",       text:"Подготовка вашего ребенка к экономике 2026+. Навык ИИ-дирижера для топовых вузов мира.", color:"#00f0ff", icon:"shield",        badge:"ROI: Future" },
+        partners: { title:"REGIONAL <span style='color:#7000ff'>LEADERSHIP</span>",        text:"Актобе как центр инноваций Центральной Азии. Спонсорство с высоким ROI для бизнеса.",  color:"#7000ff", icon:"rocket",        badge:"ROI: 10x" },
+        teachers: { title:"LOGIC OVER <span style='color:#00ff95'>ROTE</span>",            text:"Интеграция Swarm Intelligence в образовательную среду школ. Методики 2026.",           color:"#00ff95", icon:"brain-circuit", badge:"ROI: Students" }
+    };
+
+    function switchTab(id, idx) {
+        const d = STDATA[id];
+        const ind  = document.getElementById('tab-indicator');
+        const btns = ['btn-parents','btn-partners','btn-teachers'].map(b => document.getElementById(b));
+        ind.style.width = btns[idx].offsetWidth + 'px';
+        ind.style.left  = btns[idx].offsetLeft  + 'px';
+        btns.forEach((b, i) => b.style.color = i === idx ? '#000' : 'rgba(255,255,255,.35)');
+        document.getElementById('glow-1').style.backgroundColor = d.color;
+
+        document.getElementById('tab-content').innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:2rem;text-align:left;" class="lg:flex-row lg:items-center">
+                <div style="flex:3;display:flex;flex-direction:column;gap:1.5rem;">
+                    <div style="display:inline-flex;align-items:center;gap:.5rem;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);padding:.4rem .9rem;border-radius:100px;width:fit-content;">
+                        <span style="width:7px;height:7px;border-radius:50%;background:${d.color};display:inline-block;flex-shrink:0;"></span>
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.4em;color:rgba(255,255,255,.35);">${d.badge}</span>
+                    </div>
+                    <h3 style="font-size:clamp(1.8rem,5.5vw,3.8rem);font-weight:800;letter-spacing:-.04em;text-transform:uppercase;line-height:1;font-style:italic;margin:0;">${d.title}</h3>
+                    <p style="font-size:clamp(.95rem,2.2vw,1.3rem);color:rgba(255,255,255,.42);line-height:1.7;font-style:italic;margin:0;">${d.text}</p>
+                    <button style="display:inline-flex;align-items:center;gap:.5rem;padding:.9rem 2rem;background:#fff;color:#000;font-weight:900;font-size:11px;text-transform:uppercase;letter-spacing:.2em;border-radius:.75rem;border:none;cursor:pointer;transition:all .2s;width:fit-content;"
+                            onmouseover="this.style.background='${d.color}'" onmouseout="this.style.background='#fff'">
+                        ACCESS_PROTOCOL
+                    </button>
+                </div>
+                <div style="flex:2;background:rgba(255,255,255,.025);backdrop-filter:blur(20px);border:2px solid ${d.color}22;border-radius:2.5rem;padding:2rem;">
+                    <i data-lucide="${d.icon}" style="width:3rem;height:3rem;margin-bottom:1.2rem;color:${d.color};display:block;"></i>
+                    <p style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,255,255,.18);text-transform:uppercase;letter-spacing:.5em;margin-bottom:.4rem;">Node_Status</p>
+                    <p style="font-size:1.2rem;font-weight:800;text-transform:uppercase;font-style:italic;letter-spacing:-.02em;margin-bottom:1rem;">Ready for Connection.</p>
+                    <div style="height:1px;background:rgba(255,255,255,.08);margin-bottom:1rem;"></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;">
+                        <div style="background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);border-radius:1rem;padding:.75rem;text-align:center;">
+                            <div style="font-size:1.4rem;font-weight:900;font-family:'JetBrains Mono',monospace;color:${d.color};">∞</div>
+                            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,255,255,.18);text-transform:uppercase;letter-spacing:.15em;margin-top:.25rem;">Potential</div>
+                        </div>
+                        <div style="background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);border-radius:1rem;padding:.75rem;text-align:center;">
+                            <div style="font-size:1.4rem;font-weight:900;font-family:'JetBrains Mono',monospace;color:${d.color};">2026</div>
+                            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,255,255,.18);text-transform:uppercase;letter-spacing:.15em;margin-top:.25rem;">Season</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        lucide.createIcons();
+    }
+
+    // ══════════════════════════════════════════
+    //  SPA ROUTER
+    // ══════════════════════════════════════════
+    function showPage(pageId) {
+        const loader = document.getElementById('page-loader');
+        loader.style.transform = 'scaleY(1)';
+        setTimeout(() => {
+            document.getElementById('hub-page').classList.toggle('hidden', pageId !== 'hub');
+            document.getElementById('detail-page').classList.toggle('hidden', pageId !== 'detail');
+            const na = document.getElementById('nav-actions');
+            if (na) na.classList.toggle('hidden', pageId === 'detail');
+            window.scrollTo(0, 0);
+            if (pageId === 'detail') syncCounter();
+            loader.style.transformOrigin = 'top';
+            loader.style.transform = 'scaleY(0)';
+            setTimeout(() => { loader.style.transformOrigin = 'bottom'; }, 600);
+        }, 520);
+    }
+
+    // ══════════════════════════════════════════
+    //  LIVE COUNTER
+    // ══════════════════════════════════════════
+    async function syncCounter() {
+        const el  = document.getElementById('participant-counter');
+        const bar = document.getElementById('progress-bar');
+        const LIM = 50;
+        try {
+            const res  = await fetch(SCRIPT_URL);
+            const data = await res.json();
+            const cnt  = data.count || 37;
+            let v = 0;
+            const step = cnt / 80;
+            const t = setInterval(() => {
+                v = Math.min(v + step, cnt);
+                if (el)  el.textContent = Math.floor(v);
+                if (bar) bar.style.width = (v / LIM * 100) + '%';
+                if (v >= cnt) clearInterval(t);
+            }, 20);
+        } catch(e) {
+            if (el)  el.textContent = '37';
+            if (bar) bar.style.width = '74%';
+        }
+    }
+
+    // ══════════════════════════════════════════
+    //  INIT
+    // ══════════════════════════════════════════
+    window.addEventListener('load', () => {
+        lucide.createIcons();
+        switchTab('parents', 0);
+        setTimeout(() => {
+            animCount(document.getElementById('hero-events'),  12);
+            animCount(document.getElementById('hero-members'), 402);
+        }, 700);
+    });
+    </script>
+</body>
+</html>
